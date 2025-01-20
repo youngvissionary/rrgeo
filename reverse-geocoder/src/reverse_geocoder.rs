@@ -79,6 +79,19 @@ pub struct ReverseGeocoder {
 }
 
 impl ReverseGeocoder {
+
+    pub fn build_geocoder(records: Vec<([f64; 2], Record)>) -> ReverseGeocoder {
+        let mut tree = KdTree::new();
+        records.iter().enumerate().for_each(|(idx, city)| {
+            tree.add(&city.1.as_xyz(), idx);
+        });
+        
+        ReverseGeocoder {
+            locations: records,
+            tree,
+        }
+    }
+    
     /// Create a new reverse geocoder from the built-in cities.csv.
     pub fn new() -> ReverseGeocoder {
         let mut records = Vec::new();
@@ -93,14 +106,7 @@ impl ReverseGeocoder {
             records.push(([record.lat, record.lon], record));
         }
 
-        let mut tree = KdTree::new();
-        records.iter().enumerate().for_each(|(idx, city)| {
-            tree.add(&city.1.as_xyz(), idx);
-        });
-        ReverseGeocoder {
-            locations: records,
-            tree,
-        }
+        Self::build_geocoder(records)
     }
 
     pub fn from_path<P: AsRef<Path>>(file_path: P) -> Result<ReverseGeocoder, std::io::Error> {
@@ -120,15 +126,7 @@ impl ReverseGeocoder {
             return Err(std::io::Error::other("Need one or more records"));
         }
 
-        let mut tree = KdTree::new();
-        records.iter().enumerate().for_each(|(idx, city)| {
-            tree.add(&city.1.as_xyz(), idx);
-        });
-
-        Ok(ReverseGeocoder {
-            locations: records,
-            tree,
-        })
+        Ok(Self::build_geocoder(records))
     }
 
     /// Search for the closest record to a given (latitude, longitude).

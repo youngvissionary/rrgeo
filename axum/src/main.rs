@@ -46,6 +46,32 @@ struct Locations {
     locations: Vec<Location>,
 }
 
+// impl JsonExtractor for Locations {
+//     type Rejection = (StatusCode, Json<serde_json::Value>);
+
+//     fn extract<'a>(body: &'a axum::body::Bytes) -> std::prelude::v1::Result<Self, Self::Rejection> {
+//         match serde_json::from_slice(body) {
+//             Ok(locations) => Ok(locations),
+//             Err(_) => Err((
+//                 StatusCode::BAD_REQUEST,
+//                 Json(json!({ "error": "Invalid JSON" })),
+//             )),
+//         }
+//     }
+// }
+
+impl Location {
+    fn validate(&self) -> Result<(), String> {
+        if self.lat < -90.0 || self.lat > 90.0 {
+            return Err("Latitude must be between -90 and 90".to_string());
+        }
+        if self.long < -180.0 || self.long > 180.0 {
+            return Err("Longitude must be between -180 and 180".to_string());
+        }
+        Ok(())
+    }
+}
+
 async fn query(Query(params): Query<Location>) -> impl IntoResponse {
     let loc = GEOCODER.search((params.lat, params.long));
     (StatusCode::OK, Json(loc))
@@ -57,6 +83,16 @@ async fn query_multiple(JsonExtractor(params): JsonExtractor<Locations>) -> impl
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": "Too many locations. Maximum allowed is 100." }))
         );
+    }
+
+    // Validate all locations first
+    for location in &params.locations {
+        if let Err(e) = location.validate() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": e }))
+            );
+        }
     }
 
     let results = params

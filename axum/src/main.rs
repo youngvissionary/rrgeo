@@ -1,4 +1,13 @@
-use axum::{extract::Query, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{ 
+    extract::Json as JsonExtractor, 
+    extract::Query, 
+    http::StatusCode, 
+    response::IntoResponse, 
+    routing::{get,post },
+    Json, 
+    Router
+};
+use serde_json::json;
 use lazy_static::lazy_static;
 use reverse_geocoder::ReverseGeocoder;
 use serde::Deserialize;
@@ -12,7 +21,9 @@ lazy_static! {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let app = Router::new().route("/", get(query));
+    let app = Router::new()
+                        .route("/", get(query))
+                        .route("/batch", post(query_multiple));
     let addr = "127.0.0.1:3000";
 
     let listener = TcpListener::bind(addr).await.unwrap();
@@ -25,12 +36,34 @@ async fn main() {
 }
 
 #[derive(Debug, Deserialize)]
-struct LatLong {
+struct Location {
     lat: f64,
     long: f64,
 }
 
-async fn query(Query(params): Query<LatLong>) -> impl IntoResponse {
+#[derive(Debug, Deserialize)]
+struct Locations {
+    locations: Vec<Location>,
+}
+
+async fn query(Query(params): Query<Location>) -> impl IntoResponse {
     let loc = GEOCODER.search((params.lat, params.long));
     (StatusCode::OK, Json(loc))
+}
+
+async fn query_multiple(JsonExtractor(params): JsonExtractor<Locations>) -> impl IntoResponse {
+    if params.locations.len() > 100 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Too many locations. Maximum allowed is 100." }))
+        );
+    }
+
+    let results = params
+        .locations
+        .iter()
+        .map(|loc| GEOCODER.search((loc.lat, loc.long)))
+        .collect::<Vec<_>>();
+    
+        (StatusCode::OK, Json(json!({ "results": results })))
 }

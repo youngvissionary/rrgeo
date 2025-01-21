@@ -10,11 +10,16 @@ use axum::{
 use serde_json::json;
 use lazy_static::lazy_static;
 use reverse_geocoder::ReverseGeocoder;
-use serde::Deserialize;
+use serde::{Deserialize};
 use tokio::net::TcpListener;
+
+use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 lazy_static! {
     static ref GEOCODER: ReverseGeocoder = ReverseGeocoder::new();
+    static ref RATE_LIMITER: Arc<Semaphore> = Arc::new(Semaphore::new(4));
+
 }
 
 #[tokio::main]
@@ -46,6 +51,18 @@ struct Locations {
     locations: Vec<Location>,
 }
 
+// #[derive(Serialize)]
+// struct BatchResponse<'a> {
+//     results: Vec<LocationResult<'a>>,
+// }
+
+// #[derive(Serialize)]
+// struct LocationResult<'a> {
+//     location: Location,
+//     result: Vec<reverse_geocoder::SearchResult<'a>>,
+//     status: String,
+// }
+
 // impl JsonExtractor for Locations {
 //     type Rejection = (StatusCode, Json<serde_json::Value>);
 
@@ -60,7 +77,7 @@ struct Locations {
 //     }
 // }
 
-impl Location {
+impl  Location {
     fn validate(&self) -> Result<(), String> {
         if self.lat < -90.0 || self.lat > 90.0 {
             return Err("Latitude must be between -90 and 90".to_string());
@@ -78,6 +95,7 @@ async fn query(Query(params): Query<Location>) -> impl IntoResponse {
 }
 
 async fn query_multiple(JsonExtractor(params): JsonExtractor<Locations>) -> impl IntoResponse {
+    let _permit = RATE_LIMITER.acquire().await.unwrap();
     if params.locations.len() > 100 {
         return (
             StatusCode::BAD_REQUEST,
@@ -95,7 +113,7 @@ async fn query_multiple(JsonExtractor(params): JsonExtractor<Locations>) -> impl
         }
     }
 
-    let results = params
+    let results: Vec<reverse_geocoder::SearchResult<'_>> = params
         .locations
         .iter()
         .map(|loc| GEOCODER.search((loc.lat, loc.long)))

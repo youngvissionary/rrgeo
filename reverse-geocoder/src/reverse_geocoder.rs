@@ -30,9 +30,9 @@ pub struct Record {
     /// Location name
     pub name: String,
     /// Administrative district 1
-    pub admin1: String,
+    pub region: String,
     /// Administrative district 2
-    pub admin2: String,
+    pub district: String,
     /// Country Code
     pub cc: String,
 }
